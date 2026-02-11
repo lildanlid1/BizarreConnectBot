@@ -1,0 +1,13 @@
+{
+  "name": "bedrock-offline-bot",
+  "version": "1.0.0",
+  "description": "Offline mode Bedrock Dedicated Server bot",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "bedrock-protocol": "^3.53.0"
+  }
+}

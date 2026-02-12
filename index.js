@@ -6,7 +6,7 @@ const WEB_PORT = 3000 // Web interface port
 // Your Bedrock server config
 const SERVER_HOST = 'lildanlid2.progamer.me'
 const SERVER_PORT = 40280
-const BOT_USERNAME = 'BizarreConnect'
+const BOT_USERNAME = `BizarreConnect_${Math.floor(Math.random() * 10000)}`
 
 let client = null
 let movementInterval = null

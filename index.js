@@ -1,15 +1,16 @@
 const bedrock = require('bedrock-protocol')
 const express = require('express')
 const app = express()
-const WEB_PORT = 3000 // Web interface port
+const WEB_PORT = 3000
 
 // Your Bedrock server config
 const SERVER_HOST = 'lildanlid2.progamer.me'
 const SERVER_PORT = 40280
-const BOT_USERNAME = `BizarreConnect_${Math.floor(Math.random() * 10000)}`
+const BOT_USERNAME = () => `BizarreConnect_${Math.floor(Math.random() * 10000)}`
 
 let client = null
 let movementInterval = null
+let restartInterval = null
 
 // Start bot
 function startBot() {
@@ -18,17 +19,18 @@ function startBot() {
   client = bedrock.createClient({
     host: SERVER_HOST,
     port: SERVER_PORT,
-    username: BOT_USERNAME,
+    username: BOT_USERNAME(),
     offline: true
   })
 
   client.on('join', () => console.log('Bot joined server'))
+
   client.on('spawn', () => {
     console.log('Bot spawned')
 
     // Anti-idle loop
     movementInterval = setInterval(() => {
-      if (!client.entity) return
+      if (!client?.entity) return
       client.queue('player_auth_input', {
         pitch: 0,
         yaw: 0,
@@ -64,6 +66,11 @@ function startBot() {
 function cleanup() {
   if (movementInterval) clearInterval(movementInterval)
   movementInterval = null
+
+  if (client) {
+    try { client.close() } catch {}
+  }
+
   client = null
 }
 
@@ -71,6 +78,17 @@ function cleanup() {
 function reconnect() {
   console.log('Reconnecting in 5 seconds...')
   setTimeout(startBot, 5000)
+}
+
+// Force restart every 20 minutes
+function setupAutoRestart() {
+  if (restartInterval) clearInterval(restartInterval)
+
+  restartInterval = setInterval(() => {
+    console.log('20 minutes reached. Restarting bot...')
+    cleanup()
+    startBot()
+  }, 20 * 60 * 1000) // 20 minutes
 }
 
 // Web interface
@@ -83,10 +101,7 @@ app.get('/', (req, res) => {
 
 app.get('/restart', (req, res) => {
   console.log('Restart requested via web interface')
-  if (client) {
-    client.close()
-    cleanup()
-  }
+  cleanup()
   startBot()
   res.send('<p>Bot restarting...</p><a href="/">Back</a>')
 })
@@ -95,5 +110,6 @@ app.listen(WEB_PORT, () => {
   console.log(`Web interface running on http://localhost:${WEB_PORT}`)
 })
 
-// Start bot
+// Start bot + auto restart timer
 startBot()
+setupAutoRestart()

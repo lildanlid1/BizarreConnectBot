@@ -95,9 +95,22 @@ function setupAutoRestart() {
 app.get('/', (req, res) => {
   res.send(`
     <h1>Bedrock Offline Bot</h1>
+    <p>Status: ${client ? '<span style="color:green">Running</span>' : '<span style="color:red">Disconnected/Reconnecting</span>'}</p>
     <p><a href="/restart">Restart Bot</a></p>
   `)
 })
+
+// --- HEALTH CHECK ENDPOINT ---
+app.get('/healthz', (req, res) => {
+  // Returns 200 OK to indicate the Node process and Express are running
+  // Optionally includes bot connection status in JSON
+  res.status(200).json({
+    status: 'ok',
+    bot_connected: !!client,
+    uptime: process.uptime()
+  })
+})
+// -----------------------------
 
 app.get('/restart', (req, res) => {
   console.log('Restart requested via web interface')

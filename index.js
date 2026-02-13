@@ -3,34 +3,54 @@ const express = require('express')
 const app = express()
 const WEB_PORT = 3000
 
-// Your Bedrock server config
-const SERVER_HOST = 'lildanlid2.progamer.me'
-const SERVER_PORT = 40280
-const BOT_USERNAME = () => `BizarreConnect_${Math.floor(Math.random() * 10000)}`
+// ---- SERVERS ----
+const SERVERS = [
+  {
+    name: 'BizarrePvP',
+    host: 'lildanlid4.progamer.me',
+    port: 48962
+  },
+  {
+    name: 'BizarreConnect',
+    host: 'lildanlid2.progamer.me',
+    port: 40280
+  }
+]
 
-let client = null
-let movementInterval = null
-let restartInterval = null
+const bots = {}
 
-// Start bot
-function startBot() {
-  console.log('Starting bot...')
+// Create random username per bot
+function generateUsername(prefix) {
+  return `${prefix}_${Math.floor(Math.random() * 10000)}`
+}
 
-  client = bedrock.createClient({
-    host: SERVER_HOST,
-    port: SERVER_PORT,
-    username: BOT_USERNAME(),
+// Start a bot
+function startBot(server) {
+  console.log(`[${server.name}] Starting bot...`)
+
+  const client = bedrock.createClient({
+    host: server.host,
+    port: server.port,
+    username: generateUsername(server.name),
     offline: true
   })
 
-  client.on('join', () => console.log('Bot joined server'))
+  bots[server.name] = {
+    client,
+    movementInterval: null
+  }
+
+  client.on('join', () => {
+    console.log(`[${server.name}] Joined server`)
+  })
 
   client.on('spawn', () => {
-    console.log('Bot spawned')
+    console.log(`[${server.name}] Spawned`)
 
     // Anti-idle loop
-    movementInterval = setInterval(() => {
+    bots[server.name].movementInterval = setInterval(() => {
       if (!client?.entity) return
+
       client.queue('player_auth_input', {
         pitch: 0,
         yaw: 0,
@@ -47,82 +67,93 @@ function startBot() {
   })
 
   client.on('disconnect', (reason) => {
-    console.log('Disconnected:', reason)
-    cleanup()
-    reconnect()
+    console.log(`[${server.name}] Disconnected:`, reason)
+    cleanupBot(server.name)
+    reconnectBot(server)
   })
 
   client.on('error', (err) => {
-    console.log('Error:', err.message)
-    if (err.message.includes('Ping timed out')) {
-      console.log('Ping timed out, reconnecting...')
-      cleanup()
-      reconnect()
-    }
+    console.log(`[${server.name}] Error:`, err.message)
+    cleanupBot(server.name)
+    reconnectBot(server)
   })
 }
 
-// Cleanup
-function cleanup() {
-  if (movementInterval) clearInterval(movementInterval)
-  movementInterval = null
+// Cleanup one bot
+function cleanupBot(name) {
+  const bot = bots[name]
+  if (!bot) return
 
-  if (client) {
-    try { client.close() } catch {}
-  }
+  if (bot.movementInterval)
+    clearInterval(bot.movementInterval)
 
-  client = null
+  try {
+    bot.client?.close()
+  } catch {}
+
+  bots[name] = null
 }
 
-// Reconnect
-function reconnect() {
-  console.log('Reconnecting in 5 seconds...')
-  setTimeout(startBot, 5000)
+// Reconnect one bot
+function reconnectBot(server) {
+  console.log(`[${server.name}] Reconnecting in 5 seconds...`)
+  setTimeout(() => startBot(server), 5000)
 }
 
-// Force restart every 20 minutes
-function setupAutoRestart() {
-  if (restartInterval) clearInterval(restartInterval)
-
-  restartInterval = setInterval(() => {
-    console.log('20 minutes reached. Restarting bot...')
-    cleanup()
-    startBot()
-  }, 20 * 60 * 1000) // 20 minutes
+// Restart all bots
+function restartAllBots() {
+  console.log('Restarting all bots...')
+  SERVERS.forEach(server => {
+    cleanupBot(server.name)
+    startBot(server)
+  })
 }
 
-// Web interface
+// Auto restart every 20 minutes
+setInterval(() => {
+  console.log('20 minutes reached. Restarting all bots...')
+  restartAllBots()
+}, 20 * 60 * 1000)
+
+
+// ---------------- WEB PANEL ----------------
+
 app.get('/', (req, res) => {
+  let statusHtml = ''
+
+  SERVERS.forEach(server => {
+    const connected = bots[server.name]?.client
+    statusHtml += `
+      <p>${server.name}: 
+      ${connected 
+        ? '<span style="color:green">Running</span>' 
+        : '<span style="color:red">Disconnected</span>'}
+      </p>`
+  })
+
   res.send(`
-    <h1>Bedrock Offline Bot</h1>
-    <p>Status: ${client ? '<span style="color:green">Running</span>' : '<span style="color:red">Disconnected/Reconnecting</span>'}</p>
-    <p><a href="/restart">Restart Bot</a></p>
+    <h1>Bedrock Multi Bot</h1>
+    ${statusHtml}
+    <p><a href="/restart">Restart All Bots</a></p>
   `)
 })
 
-// --- HEALTH CHECK ENDPOINT ---
 app.get('/healthz', (req, res) => {
-  // Returns 200 OK to indicate the Node process and Express are running
-  // Optionally includes bot connection status in JSON
   res.status(200).json({
     status: 'ok',
-    bot_connected: !!client,
+    bots: Object.keys(bots),
     uptime: process.uptime()
   })
 })
-// -----------------------------
 
 app.get('/restart', (req, res) => {
-  console.log('Restart requested via web interface')
-  cleanup()
-  startBot()
-  res.send('<p>Bot restarting...</p><a href="/">Back</a>')
+  restartAllBots()
+  res.send('<p>All bots restarting...</p><a href="/">Back</a>')
 })
 
 app.listen(WEB_PORT, () => {
   console.log(`Web interface running on http://localhost:${WEB_PORT}`)
 })
 
-// Start bot + auto restart timer
-startBot()
-setupAutoRestart()
+// ---- START BOTH BOTS ----
+SERVERS.forEach(server => startBot(server))
